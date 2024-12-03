@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link href="../../dist-assets/css/themes/lite-purple.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+ 
+</head>
+<body class="container mt-4">
+  
+
+    <div class="input-group mt-2 mb-3 mt-4">
+        <div class="input-group-prepend">
+            <span class="input-group-text">PAS</span>
+        </div>
+        <!-- Convierte el input en un select -->
+        <select class="form-control" id="pasDropdown"></select>
+    </div>
+
+
+
+    
+    <button class="btn btn-primary col-md-2 margin-auto ml-12 mt-3 " onclick="createFolder()">crear carpeta</button>
+    <!-- <div class="col-md-12 d-flex justify-content-end"> 
+        <button id="authorize_button" class="btn btn-secondary" onclick="handleAuthClick()">A</button>
+    </div> -->
+    <script src="../../dist-assets/js/plugins/jquery-3.3.1.min.js"></script>
+   <script>
+
+const SPREADSHEET_ID = '1vnJXUhAGGcI8xt-83_T2K_TzJNqhz2nYdcMhilSqkWY';  // Reemplaza con tu ID de hoja de cálculo
+const spreadsheetId = '1gzp1hLfZaZMQarKdxPnvtHeyTioqhd3vatL-UmFnlUI';
+const apiKey = 'AIzaSyBLuMXUjJmU3XLfErAIH-iI4pXzmSnl-0E'; //  clave de API
+const range = 'Sheet1'; // 
+const CLIENT_ID = '607561137784-rq84r06gop7p4hjo1nnv0q5re4fl2nff.apps.googleusercontent.com';
+const API_KEY = 'AIzaSyBLuMXUjJmU3XLfErAIH-iI4pXzmSnl-0E';
+const DISCOVERY_DOCS = [
+    'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
+    'https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest'
+];
+const SCOPES = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets';
+let tokenClient;
+let gapiInited = false;
+let gisInited = false;
+
+function gapiLoaded() {
+    gapi.load('client', initializeGapiClient);
+}
+
+async function initializeGapiClient() {
+    await gapi.client.init({
+        apiKey: API_KEY,
+        discoveryDocs: DISCOVERY_DOCS,
+    });
+    gapiInited = true;
+
+    // Intentar autenticar automáticamente
+    attemptSilentAuth();
+}
+
+function gisLoaded() {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        callback: async (resp) => {
+            if (resp.error !== undefined) {
+                console.error('Error durante la autenticación:', resp.error);
+                return;
+            }
+        }
+    });
+    gisInited = true;
+}
+
+async function attemptSilentAuth() {
+    const storedToken = localStorage.getItem('google_access_token');
+
+    if (storedToken) {
+        // Establecer el token almacenado en el cliente de gapi
+        gapi.client.setToken({ access_token: storedToken });
+        try {
+            // Intentar un llamado de prueba para verificar si el token sigue siendo válido
+    
+            console.log('Autenticación silenciosa exitosa.');
+            return;
+        } catch (err) {
+            console.error('Token expirado o inválido. Reautenticando...', err);
+        }
+    }
+
+    // Si el token no es válido o no existe, solicitar autenticación
+    handleAuthClick();
+}
+
+function handleAuthClick() {
+    tokenClient.callback = async (resp) => {
+        if (resp.error !== undefined) {
+            console.error('Error durante la autenticación:', resp.error);
+            return;
+        }
+
+        // Almacenar el token en localStorage
+        const accessToken = gapi.client.getToken().access_token;
+        localStorage.setItem('google_access_token', accessToken);
+
+        console.log('Token guardado en localStorage.');
+
+    };
+
+    if (gapi.client.getToken() === null) {
+        tokenClient.requestAccessToken({ prompt: '' }); // Autenticación silenciosa
+    } else {
+        tokenClient.requestAccessToken({ prompt: '' });
+    }
+}
+
+function handleSignoutClick() {
+    const token = gapi.client.getToken();
+    if (token !== null) {
+        google.accounts.oauth2.revoke(token.access_token, () => {
+            gapi.client.setToken('');
+            localStorage.removeItem('google_access_token'); // Eliminar el token almacenado
+            console.log('Sesión cerrada.');
+        });
+    }
+}
+
+
+
+
+const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?key=${apiKey}`;
+// $(document).ready(function() {
+//     fetch(url)
+//         .then(response => {
+//             if (!response.ok) {
+//                 throw new Error(`HTTP error! status: ${response.status}`);
+//             }
+//             return response.json();
+//         })
+//         .then(data => {
+//             const rows = data.values;
+//             console.log(rows);
+//             const selectedRows = rows
+//           .map(row => {
+//               // Convierte el nombre del cliente a mayúsculas y compara
+//               return row[2] ;
+//           })
+//           console.log(selectedRows)
+//         })
+//         .catch(error => console.error('Error al cargar datos de Google Sheets:', error));
+// });
+
+async function createFolderInDynamicParent(parentFolderName, newFolderName) {
+    console.log(parentFolderName)
+    try {
+        // 1. Buscar la carpeta padre en Drive por nombre
+        const parentResponse = await gapi.client.drive.files.list({
+            q: `name='${parentFolderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+            fields: 'files(id, name, webViewLink)'
+         
+        });
+        console.log(parentResponse)  
+ console.log('parentResponse',parentResponse)
+        if (parentResponse.result.files.length === 0) {
+            console.error("No se encontró la carpeta padre especificada.");
+            return;
+        }
+
+        // Selecciona el primer resultado de búsqueda como la carpeta padre
+        const parentFolder = parentResponse.result.files[0];
+        console.log("Carpeta padre encontrada:", parentFolder);
+
+        // 2. Crear la nueva carpeta dentro de la carpeta padre
+        const newFolderBody = {
+            name: newFolderName,
+            mimeType: 'application/vnd.google-apps.folder',
+            parents: [parentFolder.id]
+        };
+
+        const createResponse = await gapi.client.drive.files.create({
+            resource: newFolderBody,
+            fields: 'id, name, parents, webViewLink'
+        });
+
+        if (createResponse.status === 200) {
+            const newFolder = createResponse.result;
+            console.log("Carpeta creada exitosamente:", newFolder);
+            console.log("ID de la nueva carpeta:", newFolder.id);
+            console.log("Enlace a la carpeta:", newFolder.webViewLink);
+        } else {
+            console.error("Error al crear la carpeta:", createResponse);
+        }
+    } catch (error) {
+        console.error("Error en la solicitud:", error);
+    }
+}
+
+function createFolder(){
+    
+    createFolderInDynamicParent("STELLA MARIS ROUGIER (DROQUI ANDREA)", "pasPrueba");
+
+   
+    //    createFolderInDynamicParent("Pas", "SIGUIENTE PAS")
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Inicializa Select2 en el elemento select
+    $('#pasDropdown').select2({
+        placeholder: 'Seleccione un nombre',
+        allowClear: true,
+        width: '100%'
+    });
+
+    // Realiza la solicitud fetch para obtener datos dinámicos
+    fetch(url)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            const rows = data.values;
+            console.log(rows);
+
+            // Extrae los nombres de la tercera columna (índice [2]), excluyendo la primera fila (cabeceras)
+            const selectedRows = rows.slice(1).map(row => row[2]);
+            
+            // Prepara la lista dinámica en el formato que Select2 espera (id y text)
+            const listaDinamica = selectedRows.map((nombre, index) => ({
+                id: index + 1,
+                text: nombre
+            }));
+
+            console.log('Lista Dinámica:', listaDinamica);
+
+            // Cargar la lista dinámica en el dropdown
+            $('#pasDropdown').select2({
+                data: listaDinamica
+            });
+        })
+        .catch(error => console.error('Error al cargar datos', error));
+        
+        $('#pasDropdown').on('change', function() {
+        const selectedValue = $(this).val(); // Obtiene el valor seleccionado
+        const selectedText = $(this).find('option:selected').text(); // Obtiene el texto seleccionado
+        console.log("Dropdown value (ID):", selectedValue);
+        console.log("Dropdown text:", selectedText);
+    });
+
+});
+
+console.log("dropdown value",document.getElementById('pasDropdown'));
+   </script> 
+    
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+      <script src="../../dist-assets/js/plugins/bootstrap.bundle.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+      
+</body>
+</html>
